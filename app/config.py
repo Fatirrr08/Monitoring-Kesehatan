@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     FIREBASE_CLIENT_EMAIL: Optional[str] = Field(default=None, description="Firebase Client Email")
     FIREBASE_PRIVATE_KEY: Optional[str] = Field(default=None, description="Firebase Private Key")
     FIREBASE_STORAGE_BUCKET: Optional[str] = Field(default=None, description="Firebase Storage Bucket")
+    FIREBASE_DATABASE_URL: Optional[str] = Field(default=None, description="Firebase Realtime Database URL")
     FIREBASE_CREDENTIALS_PATH: Optional[str] = Field(default=None, description="Path to serviceAccountKey.json if used")
 
     # AI API Keys
