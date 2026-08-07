@@ -44,12 +44,17 @@ def _init_firebase():
         import firebase_admin
         from firebase_admin import credentials, firestore, storage
 
+        import os
+
         if not firebase_admin._apps:
-            if settings.FIREBASE_CREDENTIALS_PATH:
-                cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
+            cred_path = settings.FIREBASE_CREDENTIALS_PATH or "serviceAccountKey.json"
+            if os.path.exists(cred_path):
+                cred = credentials.Certificate(cred_path)
+                bucket_name = settings.FIREBASE_STORAGE_BUCKET or f"{cred.project_id}.appspot.com"
                 _firebase_app = firebase_admin.initialize_app(cred, {
-                    "storageBucket": settings.FIREBASE_STORAGE_BUCKET or f"{settings.FIREBASE_PROJECT_ID}.appspot.com"
+                    "storageBucket": bucket_name
                 })
+                logger.info(f"Connected to Firebase project: {cred.project_id}")
             elif settings.FIREBASE_PROJECT_ID and settings.FIREBASE_CLIENT_EMAIL and settings.FIREBASE_PRIVATE_KEY:
                 # Replace literal \n in private key if needed
                 private_key = settings.FIREBASE_PRIVATE_KEY.replace("\\n", "\n")
@@ -60,11 +65,13 @@ def _init_firebase():
                     "private_key": private_key,
                     "token_uri": "https://oauth2.googleapis.com/token",
                 })
+                bucket_name = settings.FIREBASE_STORAGE_BUCKET or f"{settings.FIREBASE_PROJECT_ID}.appspot.com"
                 _firebase_app = firebase_admin.initialize_app(cred, {
-                    "storageBucket": settings.FIREBASE_STORAGE_BUCKET or f"{settings.FIREBASE_PROJECT_ID}.appspot.com"
+                    "storageBucket": bucket_name
                 })
+                logger.info(f"Connected to Firebase project via environment credentials: {settings.FIREBASE_PROJECT_ID}")
             else:
-                logger.warning("No explicit Firebase credentials found. Running in Local Memory Adapter mode.")
+                logger.warning("No Firebase credentials file found yet. Running in Local Memory Adapter mode until serviceAccountKey.json is provided.")
                 return None, None
 
         _firestore_db = firestore.client()
