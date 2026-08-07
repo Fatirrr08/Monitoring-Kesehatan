@@ -34,11 +34,14 @@ async def cmd_daily_score(message: Message):
 @router.callback_query(F.data == "nav:stats")
 async def cb_nav_stats(callback: CallbackQuery):
     report_text = await report_service.generate_weekly_report(callback.from_user.id)
-    await callback.message.edit_text(
-        text=report_text,
-        reply_markup=get_main_menu_keyboard(),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            text=report_text,
+            reply_markup=get_main_menu_keyboard(),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -59,11 +62,14 @@ async def cb_nav_goals(callback: CallbackQuery):
         f"• Fokus Otot: `{', '.join(p.main_muscle_focus) if p else 'Chest, Arms, Shoulders, Core'}`\n\n"
         "_Semua target di atas fleksibel dan dapat disesuaikan kapan saja._"
     )
-    await callback.message.edit_text(
-        text=text,
-        reply_markup=get_main_menu_keyboard(),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            text=text,
+            reply_markup=get_main_menu_keyboard(),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()
 
 
@@ -78,9 +84,12 @@ async def cb_nav_settings(callback: CallbackQuery):
         f"☁️ Database: `Google Cloud Firestore (Connected)`\n\n"
         "Data kamu dienkripsi dan terisolasi secara aman per Telegram User ID."
     )
-    await callback.message.edit_text(
-        text=text,
-        reply_markup=get_main_menu_keyboard(),
-        parse_mode="Markdown"
-    )
+    try:
+        await callback.message.edit_text(
+            text=text,
+            reply_markup=get_main_menu_keyboard(),
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
     await callback.answer()

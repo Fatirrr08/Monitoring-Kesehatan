@@ -43,9 +43,14 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(statistics.router)
     dp.include_router(coach.router)
 
+    from aiogram.types import ErrorEvent
+    from aiogram.exceptions import TelegramBadRequest
+
     @dp.errors()
-    async def global_error_handler(event, exception):
-        logger.error(f"Global handler exception on update: {exception}", exc_info=True)
+    async def global_error_handler(event: ErrorEvent):
+        if isinstance(event.exception, TelegramBadRequest) and "message is not modified" in str(event.exception).lower():
+            return True
+        logger.error(f"Global handler exception on update: {event.exception}", exc_info=True)
         return True
 
     return dp
