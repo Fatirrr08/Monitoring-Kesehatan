@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.models.schemas import DailySummary
 from app.services.firebase_service import firebase_service

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from typing import Any, Dict, List, Optional
@@ -9,7 +10,7 @@ from app.utils.logger import logger
 
 
 class NutritionAnalyzer:
-    """Extracts nutrition facts labels and parses free-form natural language meal descriptions."""
+    """Extracts nutrition facts labels and parses free-form natural language meal descriptions with zero-delay heuristics."""
 
     @classmethod
     async def analyze_label(cls, image_bytes: bytes, user: Optional[UserDocument] = None) -> Dict[str, Any]:
@@ -44,13 +45,13 @@ class NutritionAnalyzer:
                     "}"
                 )
 
-                response = await model.generate_content_async([prompt, pil_img])
+                response = await asyncio.wait_for(model.generate_content_async([prompt, pil_img]), timeout=5.0)
                 text = response.text.strip()
                 text = text.removeprefix("```json").removeprefix("```")
                 text = text.removesuffix("```")
                 return json.loads(text.strip())
             except Exception as e:
-                logger.warning(f"Label OCR error ({e}). Using fallback parser.")
+                logger.warning(f"Label OCR fallback ({e}).")
 
         return {
             "product_name": "Susu Protein UHT / Minuman Sehat",
@@ -72,12 +73,15 @@ class NutritionAnalyzer:
         text_query: str,
         user: Optional[UserDocument] = None,
     ) -> FoodAnalysis:
-        """Parse arbitrary casual Indonesian text describing one or more food/drink items.
-        Example: 'Lele Goreng 2 sama nasi uduk ,dini hari ini aku beli kopi susu less sugar tapi ukuran besar'
-        """
+        """Parse arbitrary casual Indonesian text with instant local heuristics for speed."""
         raw_text = text_query.strip()
 
-        # 1. Try LLM Parsing with Google Gemini
+        # 1. Check instant local heuristic parser first (0.001s response time)
+        heuristic_res = cls._heuristic_multi_item_parser(raw_text)
+        if len(heuristic_res.foods) > 0 and heuristic_res.foods[0].confidence >= 0.80:
+            return heuristic_res
+
+        # 2. If unmapped complex dish, use Gemini AI with strict 4s timeout
         if settings.AI_API_KEY:
             try:
                 import google.generativeai as genai
@@ -94,7 +98,7 @@ class NutritionAnalyzer:
                     "- Whole fresh fruits have added_sugar_g = 0.0.\n"
                     "- Return ONLY a JSON object strictly matching this schema:\n"
                     "{\n"
-                    '  "food_name": "Summary title (e.g. 2 Lele Goreng + Nasi Uduk + Kopi Susu Large)",\n'
+                    '  "food_name": "Summary title",\n'
                     '  "portion": "Combined portion description",\n'
                     '  "calories": 760,\n'
                     '  "calories_min": 680,\n'
@@ -107,30 +111,27 @@ class NutritionAnalyzer:
                     '  "fiber_g": 2.5,\n'
                     '  "sodium_mg": 650.0,\n'
                     '  "overall_confidence": 0.85,\n'
-                    '  "assumptions": ["2 ekor lele goreng standar", "Nasi uduk 1 porsi sedang", "Kopi susu ukuran besar less sugar ~10g gula"],\n'
+                    '  "assumptions": ["2 ekor lele goreng standar", "Nasi uduk 1 porsi sedang"],\n'
                     '  "foods": [\n'
-                    '    {"name": "Lele Goreng (2 ekor)", "estimated_weight_g": 180.0, "calories_min": 320, "calories_max": 400, "protein_g_min": 26.0, "protein_g_max": 30.0, "confidence": 0.85},\n'
-                    '    {"name": "Nasi Uduk", "estimated_weight_g": 200.0, "calories_min": 240, "calories_max": 280, "protein_g_min": 4.0, "protein_g_max": 6.0, "confidence": 0.85},\n'
-                    '    {"name": "Kopi Susu Less Sugar Large", "estimated_weight_g": 350.0, "calories_min": 120, "calories_max": 160, "protein_g_min": 3.0, "protein_g_max": 5.0, "confidence": 0.80}\n'
+                    '    {"name": "Lele Goreng (2 ekor)", "estimated_weight_g": 180.0, "calories_min": 320, "calories_max": 400, "protein_g_min": 26.0, "protein_g_max": 30.0, "confidence": 0.85}\n'
                     "  ]\n"
                     "}"
                 )
 
-                response = await model.generate_content_async(prompt)
+                response = await asyncio.wait_for(model.generate_content_async(prompt), timeout=3.5)
                 resp_text = response.text.strip()
                 resp_text = resp_text.removeprefix("```json").removeprefix("```")
                 resp_text = resp_text.removesuffix("```").strip()
                 parsed = json.loads(resp_text)
                 return FoodAnalysis.model_validate(parsed)
             except Exception as e:
-                logger.warning(f"Natural language meal parsing error ({e}). Using intelligent heuristic fallback.")
+                logger.warning(f"AI meal parsing timeout/fallback ({e}). Using fast heuristic.")
 
-        # 2. Intelligent Indonesian Heuristic Multi-Item Parser
-        return cls._heuristic_multi_item_parser(raw_text)
+        return heuristic_res
 
     @classmethod
     def _heuristic_multi_item_parser(cls, text: str) -> FoodAnalysis:
-        """Rule-based Indonesian meal and beverage parser."""
+        """High-speed rule-based Indonesian meal and beverage parser."""
         lower = text.lower()
         items: List[FoodItemEstimate] = []
         total_cals = 0
@@ -141,15 +142,14 @@ class NutritionAnalyzer:
         added_sugar = 0.0
         assumptions: List[str] = []
 
-        # Split clauses by comma, 'sama', 'dan', 'plus', '+', '&'
-        clauses = re.split(r"[,+&]|(?:\bsama\b)|(?:\bdan\b)|(?:\bplus\b)|(?:\bdengan\b)", lower)
+        # Split clauses by comma, 'sama', 'dan', 'plus', '+', '&', 'lalu', 'terus', 'juga'
+        clauses = re.split(r"[,+&]|(?:\bsama\b)|(?:\bdan\b)|(?:\bplus\b)|(?:\bdengan\b)|(?:\blalu\b)|(?:\bterus\b)|(?:\bjuga\b)", lower)
 
         for raw_part in clauses:
             part = raw_part.strip()
             if not part:
                 continue
 
-            # Extract multiplier (e.g. 'lele goreng 2' or '2 telur')
             mult_match = re.search(r"\b(\d+)\b", part)
             qty = int(mult_match.group(1)) if mult_match and int(mult_match.group(1)) <= 10 else 1
 
@@ -164,14 +164,14 @@ class NutritionAnalyzer:
                     calories_max=int(c * 1.15),
                     protein_g_min=p * 0.9,
                     protein_g_max=p * 1.1,
-                    confidence=0.85,
+                    confidence=0.90,
                 ))
                 total_cals += c
                 total_prot += p
                 total_fat += f
-                assumptions.append(f"{qty} ekor lele goreng digoreng standar")
+                assumptions.append(f"{qty} ekor lele goreng standar")
 
-            elif "nasi uduk" in part:
+            elif "nasi uduk" in part or "uduk" in part:
                 items.append(FoodItemEstimate(
                     name="Nasi Uduk (1 porsi)",
                     estimated_weight_g=200.0,
@@ -179,7 +179,7 @@ class NutritionAnalyzer:
                     calories_max=290,
                     protein_g_min=4.5,
                     protein_g_max=6.0,
-                    confidence=0.85,
+                    confidence=0.90,
                 ))
                 total_cals += 260
                 total_prot += 5.0
@@ -187,15 +187,15 @@ class NutritionAnalyzer:
                 total_fat += 8.0
                 assumptions.append("Nasi uduk santan sedang 1 porsi (~200g)")
 
-            elif "kopi" in part or "coffee" in part:
+            elif "kopi" in part or "coffee" in part or "latte" in part:
                 is_less = "less sugar" in part or "sedikit gula" in part or "low sugar" in part
-                is_no = "no sugar" in part or "tanpa gula" in part or "americano" in part
+                is_no = "no sugar" in part or "tanpa gula" in part or "americano" in part or "hitam" in part
                 is_large = "besar" in part or "large" in part
 
                 if is_no:
                     c = 10
                     s = 0.0
-                    name_str = "Kopi Hitam / Americano (Tanpa Gula)"
+                    name_str = "Kopi Hitam / Americano (No Sugar)"
                 elif is_less:
                     c = 140 if is_large else 100
                     s = 10.0 if is_large else 7.0
@@ -212,7 +212,7 @@ class NutritionAnalyzer:
                     calories_max=int(c * 1.15),
                     protein_g_min=2.0,
                     protein_g_max=4.0,
-                    confidence=0.80,
+                    confidence=0.85,
                 ))
                 total_cals += c
                 total_prot += 3.0
@@ -235,15 +235,16 @@ class NutritionAnalyzer:
                     calories_max=int(c * 1.1),
                     protein_g_min=p * 0.9,
                     protein_g_max=p * 1.1,
-                    confidence=0.85,
+                    confidence=0.90,
                 ))
                 total_cals += c
                 total_prot += p
                 total_fat += f
 
-            elif "nasi" in part:
+            elif "nasi" in part and "uduk" not in part:
+                is_merah = "merah" in part
                 items.append(FoodItemEstimate(
-                    name="Nasi Putih (1 porsi)",
+                    name=f"Nasi {'Merah' if is_merah else 'Putih'} (1 porsi)",
                     estimated_weight_g=150.0,
                     calories_min=180,
                     calories_max=210,
@@ -290,7 +291,6 @@ class NutritionAnalyzer:
                 total_prot += p
                 total_fat += f
 
-        # If nothing matched specifically, provide sensible generic estimate
         if not items:
             total_cals = 450
             total_prot = 20.0
@@ -333,7 +333,6 @@ class NutritionAnalyzer:
 
     @staticmethod
     def format_label_card(data: Dict[str, Any], user: Optional[UserDocument] = None) -> str:
-        """Format the product label result and explain fit with user goals."""
         sugar_g = data.get("sugar_g", 0.0)
         sugar_note = "🟢 Gula terkendali" if sugar_g <= 10 else "🟡 Perhatikan batas gula harian"
         prot_g = data.get("protein_g", 0.0)

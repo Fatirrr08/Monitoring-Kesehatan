@@ -290,8 +290,12 @@ async def process_freeform_food_text(message: Message, state: FSMContext):
     """Handle free-form Indonesian natural language meal description."""
     await state.clear()
     query = message.text.strip()
-    user_doc = await firebase_service.get_user(message.from_user.id)
+    try:
+        await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
+    except Exception:
+        pass
 
+    user_doc = await firebase_service.get_user(message.from_user.id)
     analysis = await nutrition_analyzer.analyze_natural_meal_text(query, user_doc)
     card_text = vision_service.format_food_analysis_card(analysis)
 
