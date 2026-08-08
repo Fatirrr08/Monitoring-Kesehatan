@@ -50,6 +50,7 @@ async def cb_nav_coach(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(CoachState.chatting)
+@router.message(F.text & ~F.text.startswith("/"))
 async def process_coach_chat(message: Message, state: FSMContext):
     user_query = message.text.strip()
     response_text = await ai_coach_service.get_coach_response(message.from_user.id, user_query)

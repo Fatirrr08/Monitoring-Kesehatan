@@ -1,26 +1,35 @@
 import uuid
-
-from aiogram import F, Router
+from typing import Dict, Any
+from aiogram import Router, F
 from aiogram.filters import Command
+from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
 
-from app.ai.nutrition_analyzer import nutrition_analyzer
-from app.ai.vision import vision_service
-from app.bot.keyboards import (
-    get_food_confirm_keyboard,
-    get_main_menu_keyboard,
-    get_quick_food_keyboard,
-)
-from app.bot.states import FoodState
-from app.models.schemas import FoodLog, today_str
 from app.services.firebase_service import firebase_service
 from app.services.food_database import get_food_by_key, search_food
+from app.ai.vision import vision_service
+from app.ai.nutrition_analyzer import nutrition_analyzer
+from app.bot.states import FoodState
+from app.bot.keyboards import (
+    get_main_menu_keyboard,
+    get_food_confirm_keyboard,
+    get_quick_food_keyboard,
+)
+from app.models.schemas import FoodLog, FoodAnalysis, utc_now, today_str
+from app.utils.logger import logger
 
 router = Router(name="food_router")
 
 # Temporary cache for pending food confirmations
-_pending_confirmations = {}
+_pending_confirmations: Dict[str, Any] = {}
+
+FOOD_KEYWORDS = (
+    "makan", "minum", "sarapan", "siang", "malam", "nasi", "ayam", "lele", "ikan",
+    "daging", "sapi", "telur", "tempe", "tahu", "sayur", "sop", "kopi", "susu",
+    "goreng", "rebus", "bakar", "panggang", "roti", "jus", "teh", "es", "buah",
+    "pisang", "jambu", "bakso", "sate", "mie", "indomie", "gado", "rendang",
+    "porsi", "biji", "butir", "gelas", "cup", "ekor", "potong", "mendoan"
+)
 
 
 @router.message(Command("food"))
@@ -29,46 +38,43 @@ async def cmd_food_menu(message: Message, state: FSMContext):
     """Show food logging options or parse text directly."""
     args = message.text.split(maxsplit=1)
     if len(args) > 1:
-        # User typed e.g. "/makan dada ayam" or "/makan nasi goreng"
         query = args[1].strip()
-        matched = search_food(query)
-        if matched:
-            item = matched[0]
-            log = FoodLog(
-                food_log_id=f"food_{today_str()}_{uuid.uuid4().hex[:6]}",
-                telegram_user_id=message.from_user.id,
-                food_name=item.name,
-                portion=item.default_portion,
-                calories=item.calories,
-                protein_g=item.protein_g,
-                carbs_g=item.carbs_g,
-                fat_g=item.fat_g,
-                total_sugar_g=item.total_sugar_g,
-                added_sugar_g=item.added_sugar_g,
-                fiber_g=item.fiber_g,
-                sodium_mg=item.sodium_mg,
-                confidence="high",
-                source="preset",
-                notes=item.notes,
-            )
-            await firebase_service.log_food(log)
-            await message.answer(
-                f"✅ *Berhasil Dicatat!*\n\n"
-                f"🍽️ *{item.name}* ({item.default_portion})\n"
-                f"🔥 Kalori: `{item.calories} kcal`\n"
-                f"💪 Protein: `{item.protein_g} g` | 🍞 Karbo: `{item.carbs_g} g` | 🥑 Lemak: `{item.fat_g} g`\n"
-                f"🍬 Added Sugar: `{item.added_sugar_g} g`",
-                reply_markup=get_main_menu_keyboard(),
-                parse_mode="Markdown"
-            )
-            return
+        user_doc = await firebase_service.get_user(message.from_user.id)
+        analysis = await nutrition_analyzer.analyze_natural_meal_text(query, user_doc)
+        card_text = vision_service.format_food_analysis_card(analysis)
+        pending_id = uuid.uuid4().hex[:8]
+        _pending_confirmations[pending_id] = {
+            "telegram_user_id": message.from_user.id,
+            "food_name": analysis.food_name,
+            "portion": analysis.portion,
+            "calories": analysis.calories,
+            "calories_min": analysis.calories_min,
+            "calories_max": analysis.calories_max,
+            "protein_g": analysis.protein_g,
+            "carbs_g": analysis.carbs_g,
+            "fat_g": analysis.fat_g,
+            "total_sugar_g": analysis.total_sugar_g,
+            "added_sugar_g": analysis.added_sugar_g,
+            "fiber_g": analysis.fiber_g,
+            "sodium_mg": analysis.sodium_mg,
+            "confidence": analysis.overall_confidence,
+            "source": "manual_text",
+            "assumptions": analysis.assumptions,
+        }
+        await message.answer(
+            text=card_text,
+            reply_markup=get_food_confirm_keyboard(pending_id),
+            parse_mode="Markdown"
+        )
+        return
 
     # Show prompt / quick picker
     await state.set_state(FoodState.waiting_food_text)
     await message.answer(
         "🍱 *CATAT MAKANAN*\n\n"
-        "Silakan pilih menu cepat di bawah ini, atau *ketik nama makanan* (contoh: `nasi goreng`), "
-        "atau *kirim foto makanan / label kemasan* langsung ke bot:",
+        "Silakan pilih menu cepat di bawah ini, atau *ketik bebas apa yang kamu makan/minum* "
+        "(contoh: `Lele goreng 2 sama nasi uduk, kopi susu less sugar large`), "
+        "atau *kirim foto makanan / label kemasan* langsung ke chat ini:",
         reply_markup=get_quick_food_keyboard(),
         parse_mode="Markdown"
     )
@@ -79,7 +85,7 @@ async def cb_nav_food(callback: CallbackQuery, state: FSMContext):
     await state.set_state(FoodState.waiting_food_text)
     await callback.message.edit_text(
         "🍱 *CATAT MAKANAN*\n\n"
-        "Silakan pilih menu cepat di bawah ini, atau ketik nama makanan di chat:",
+        "Silakan pilih menu cepat di bawah ini, atau ketik langsung makananmu di chat:",
         reply_markup=get_quick_food_keyboard(),
         parse_mode="Markdown"
     )
@@ -119,17 +125,17 @@ async def cb_quick_food(callback: CallbackQuery):
         added_sugar_g=item.added_sugar_g,
         fiber_g=item.fiber_g,
         sodium_mg=item.sodium_mg,
-        confidence="high",
+        confidence=0.95,
         source="preset",
         notes=item.notes,
     )
     await firebase_service.log_food(log)
     await callback.message.edit_text(
-        f"✅ *Tercatat ke Jurnal!*\n\n"
+        f"✅ *Berhasil Dicatat ke Firestore!*\n\n"
         f"🍽️ *{item.name}* ({item.default_portion})\n"
         f"🔥 Kalori: `{item.calories} kcal`\n"
         f"💪 Protein: `{item.protein_g} g` | 🍞 Karbo: `{item.carbs_g} g`\n"
-        f"🍬 Added Sugar: `{item.added_sugar_g} g`",
+        f"🍬 Added Sugar: `{item.added_sugar_g or 0.0} g`",
         reply_markup=get_main_menu_keyboard(),
         parse_mode="Markdown"
     )
@@ -255,18 +261,19 @@ async def cb_food_confirm(callback: CallbackQuery):
 
     if action == "save":
         saved_log = await firebase_service.save_food_analysis(callback.from_user.id, data)
+        sugar_str = f"`{saved_log.added_sugar_g} g`" if saved_log.added_sugar_g is not None else "`0.0 g (Alami)`"
         await callback.message.edit_text(
             f"✅ *Makanan Berhasil Dicatat ke Firestore!*\n\n"
             f"🍽️ *{saved_log.food_name}*\n"
             f"🔥 Kalori: `{saved_log.calories} kcal`\n"
             f"💪 Protein: `{saved_log.protein_g} g` | 🍞 Karbo: `{saved_log.carbs_g} g`\n"
-            f"🍬 Added Sugar: `{saved_log.added_sugar_g} g`",
+            f"🍬 Added Sugar: {sugar_str}\n\n"
+            "_Data langsung tersinkronisasi ke dashboard harianmu._",
             reply_markup=get_main_menu_keyboard(),
             parse_mode="Markdown"
         )
         await callback.answer("Tersimpan!")
     elif action == "edit":
-        # Save baseline and prompt for manual note
         saved_log = await firebase_service.save_food_analysis(callback.from_user.id, data)
         await callback.message.edit_text(
             f"✏️ Makanan tercatat sebagai *{saved_log.food_name}*.\n"
@@ -278,63 +285,38 @@ async def cb_food_confirm(callback: CallbackQuery):
 
 
 @router.message(FoodState.waiting_food_text)
-async def process_manual_food_text(message: Message, state: FSMContext):
-    """Handle text input when user searches or types food name."""
+@router.message(F.text & ~F.text.startswith("/") & F.text.lower().contains("makan") | F.text.lower().contains("kopi") | F.text.lower().contains("lele") | F.text.lower().contains("ayam") | F.text.lower().contains("nasi") | F.text.lower().contains("telur") | F.text.lower().contains("susu"))
+async def process_freeform_food_text(message: Message, state: FSMContext):
+    """Handle free-form Indonesian natural language meal description."""
     await state.clear()
     query = message.text.strip()
-    matched = search_food(query)
+    user_doc = await firebase_service.get_user(message.from_user.id)
 
-    if matched:
-        item = matched[0]
-        log = FoodLog(
-            food_log_id=f"food_{today_str()}_{uuid.uuid4().hex[:6]}",
-            telegram_user_id=message.from_user.id,
-            food_name=item.name,
-            portion=item.default_portion,
-            calories=item.calories,
-            protein_g=item.protein_g,
-            carbs_g=item.carbs_g,
-            fat_g=item.fat_g,
-            total_sugar_g=item.total_sugar_g,
-            added_sugar_g=item.added_sugar_g,
-            fiber_g=item.fiber_g,
-            sodium_mg=item.sodium_mg,
-            confidence="high",
-            source="manual_text",
-            notes=item.notes,
-        )
-        await firebase_service.log_food(log)
-        await message.answer(
-            f"✅ *Berhasil Dicatat!*\n\n"
-            f"🍽️ *{item.name}* ({item.default_portion})\n"
-            f"🔥 Kalori: `{item.calories} kcal`\n"
-            f"💪 Protein: `{item.protein_g} g` | 🍞 Karbo: `{item.carbs_g} g`\n"
-            f"🍬 Added Sugar: `{item.added_sugar_g} g`",
-            reply_markup=get_main_menu_keyboard(),
-            parse_mode="Markdown"
-        )
-    else:
-        # Fallback estimation
-        log = FoodLog(
-            food_log_id=f"food_{today_str()}_{uuid.uuid4().hex[:6]}",
-            telegram_user_id=message.from_user.id,
-            food_name=query.title(),
-            portion="1 porsi standar",
-            calories=350,
-            protein_g=15.0,
-            carbs_g=40.0,
-            fat_g=12.0,
-            total_sugar_g=2.0,
-            added_sugar_g=1.0,
-            confidence="medium",
-            source="manual_text",
-        )
-        await firebase_service.log_food(log)
-        await message.answer(
-            f"✅ *Dicatat dengan Estimasi Wajar:*\n\n"
-            f"🍽️ *{query.title()}*\n"
-            f"🔥 Kalori: ~`350 kcal`\n"
-            f"💪 Protein: ~`15 g` | 🍞 Karbo: ~`40 g`",
-            reply_markup=get_main_menu_keyboard(),
-            parse_mode="Markdown"
-        )
+    analysis = await nutrition_analyzer.analyze_natural_meal_text(query, user_doc)
+    card_text = vision_service.format_food_analysis_card(analysis)
+
+    pending_id = uuid.uuid4().hex[:8]
+    _pending_confirmations[pending_id] = {
+        "telegram_user_id": message.from_user.id,
+        "food_name": analysis.food_name,
+        "portion": analysis.portion,
+        "calories": analysis.calories,
+        "calories_min": analysis.calories_min,
+        "calories_max": analysis.calories_max,
+        "protein_g": analysis.protein_g,
+        "carbs_g": analysis.carbs_g,
+        "fat_g": analysis.fat_g,
+        "total_sugar_g": analysis.total_sugar_g,
+        "added_sugar_g": analysis.added_sugar_g,
+        "fiber_g": analysis.fiber_g,
+        "sodium_mg": analysis.sodium_mg,
+        "confidence": analysis.overall_confidence,
+        "source": "manual_text",
+        "assumptions": analysis.assumptions,
+    }
+
+    await message.answer(
+        text=card_text,
+        reply_markup=get_food_confirm_keyboard(pending_id),
+        parse_mode="Markdown"
+    )

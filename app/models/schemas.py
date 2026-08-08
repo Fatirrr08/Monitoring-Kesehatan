@@ -121,7 +121,7 @@ class FoodLog(BaseModel):
     added_sugar_g: float | None = None
     fiber_g: float = 0.0
     sodium_mg: float = 0.0
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    confidence: float | str = 0.8
     source: Literal["manual_text", "preset", "photo_ai", "nutrition_label_ocr", "database"] = "manual_text"
     image_reference: str | None = None
     image_url: str | None = None
