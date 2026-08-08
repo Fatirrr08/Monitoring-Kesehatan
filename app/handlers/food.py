@@ -15,7 +15,7 @@ from app.bot.keyboards import (
     get_food_confirm_keyboard,
     get_quick_food_keyboard,
 )
-from app.models.schemas import FoodLog, FoodAnalysis, utc_now, today_str
+from app.models.schemas import FoodLog, utc_now, today_str
 from app.utils.logger import logger
 
 router = Router(name="food_router")
@@ -23,13 +23,23 @@ router = Router(name="food_router")
 # Temporary cache for pending food confirmations
 _pending_confirmations: Dict[str, Any] = {}
 
-FOOD_KEYWORDS = (
+FOOD_WORDS = {
     "makan", "minum", "sarapan", "siang", "malam", "nasi", "ayam", "lele", "ikan",
     "daging", "sapi", "telur", "tempe", "tahu", "sayur", "sop", "kopi", "susu",
     "goreng", "rebus", "bakar", "panggang", "roti", "jus", "teh", "es", "buah",
     "pisang", "jambu", "bakso", "sate", "mie", "indomie", "gado", "rendang",
-    "porsi", "biji", "butir", "gelas", "cup", "ekor", "potong", "mendoan"
-)
+    "porsi", "biji", "butir", "gelas", "cup", "ekor", "potong", "mendoan", "uduk",
+    "sugar", "latte", "snack", "gandum", "bubur", "soto", "burger", "pizza"
+}
+
+
+def is_food_related_text(text: str) -> bool:
+    """Check if arbitrary text contains food, meal, or beverage mentions."""
+    if not text or text.startswith("/"):
+        return False
+    lower = text.lower()
+    # Check if any food word is inside the sentence
+    return any(w in lower for w in FOOD_WORDS)
 
 
 @router.message(Command("food"))
@@ -39,33 +49,7 @@ async def cmd_food_menu(message: Message, state: FSMContext):
     args = message.text.split(maxsplit=1)
     if len(args) > 1:
         query = args[1].strip()
-        user_doc = await firebase_service.get_user(message.from_user.id)
-        analysis = await nutrition_analyzer.analyze_natural_meal_text(query, user_doc)
-        card_text = vision_service.format_food_analysis_card(analysis)
-        pending_id = uuid.uuid4().hex[:8]
-        _pending_confirmations[pending_id] = {
-            "telegram_user_id": message.from_user.id,
-            "food_name": analysis.food_name,
-            "portion": analysis.portion,
-            "calories": analysis.calories,
-            "calories_min": analysis.calories_min,
-            "calories_max": analysis.calories_max,
-            "protein_g": analysis.protein_g,
-            "carbs_g": analysis.carbs_g,
-            "fat_g": analysis.fat_g,
-            "total_sugar_g": analysis.total_sugar_g,
-            "added_sugar_g": analysis.added_sugar_g,
-            "fiber_g": analysis.fiber_g,
-            "sodium_mg": analysis.sodium_mg,
-            "confidence": analysis.overall_confidence,
-            "source": "manual_text",
-            "assumptions": analysis.assumptions,
-        }
-        await message.answer(
-            text=card_text,
-            reply_markup=get_food_confirm_keyboard(pending_id),
-            parse_mode="Markdown"
-        )
+        await _process_and_show_food_card(message, query)
         return
 
     # Show prompt / quick picker
@@ -284,12 +268,8 @@ async def cb_food_confirm(callback: CallbackQuery):
         await callback.answer()
 
 
-@router.message(FoodState.waiting_food_text)
-@router.message(F.text & ~F.text.startswith("/") & F.text.lower().contains("makan") | F.text.lower().contains("kopi") | F.text.lower().contains("lele") | F.text.lower().contains("ayam") | F.text.lower().contains("nasi") | F.text.lower().contains("telur") | F.text.lower().contains("susu"))
-async def process_freeform_food_text(message: Message, state: FSMContext):
-    """Handle free-form Indonesian natural language meal description."""
-    await state.clear()
-    query = message.text.strip()
+async def _process_and_show_food_card(message: Message, query: str):
+    """Internal helper to analyze food and send confirmation card."""
     try:
         await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
     except Exception:
@@ -324,3 +304,12 @@ async def process_freeform_food_text(message: Message, state: FSMContext):
         reply_markup=get_food_confirm_keyboard(pending_id),
         parse_mode="Markdown"
     )
+
+
+@router.message(FoodState.waiting_food_text)
+@router.message(lambda msg: msg.text and is_food_related_text(msg.text))
+async def process_freeform_food_text(message: Message, state: FSMContext):
+    """Handle free-form Indonesian natural language meal description."""
+    await state.clear()
+    query = message.text.strip()
+    await _process_and_show_food_card(message, query)

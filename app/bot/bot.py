@@ -48,7 +48,8 @@ def create_dispatcher() -> Dispatcher:
 
     @dp.errors()
     async def global_error_handler(event: ErrorEvent):
-        if isinstance(event.exception, TelegramBadRequest) and "message is not modified" in str(event.exception).lower():
+        err_msg = str(event.exception).lower()
+        if isinstance(event.exception, TelegramBadRequest) and ("message is not modified" in err_msg or "query is too old" in err_msg):
             return True
         logger.error(f"Global handler exception on update: {event.exception}", exc_info=True)
         return True
