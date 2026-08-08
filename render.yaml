@@ -1,5 +1,5 @@
 services:
-  - type: worker
+  - type: web
     name: fittrack-ai-bot
     env: docker
     dockerfilePath: Dockerfile
