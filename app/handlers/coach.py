@@ -1,11 +1,11 @@
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, Message
 
 from app.ai.coach import ai_coach_service
-from app.bot.states import CoachState
 from app.bot.keyboards import get_main_menu_keyboard
+from app.bot.states import CoachState
 
 router = Router(name="coach_router")
 

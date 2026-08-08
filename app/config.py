@@ -1,6 +1,6 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+
 from pydantic import Field
-from typing import Optional
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -10,15 +10,15 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = Field(default="123456789:AAG_MockBotTokenForTestingPurpose", description="Telegram Bot API Token")
 
     # Firebase Credentials
-    FIREBASE_PROJECT_ID: Optional[str] = Field(default=None, description="Firebase Project ID")
-    FIREBASE_CLIENT_EMAIL: Optional[str] = Field(default=None, description="Firebase Client Email")
-    FIREBASE_PRIVATE_KEY: Optional[str] = Field(default=None, description="Firebase Private Key")
-    FIREBASE_STORAGE_BUCKET: Optional[str] = Field(default=None, description="Firebase Storage Bucket")
-    FIREBASE_DATABASE_URL: Optional[str] = Field(default=None, description="Firebase Realtime Database URL")
-    FIREBASE_CREDENTIALS_PATH: Optional[str] = Field(default=None, description="Path to serviceAccountKey.json if used")
+    FIREBASE_PROJECT_ID: str | None = Field(default=None, description="Firebase Project ID")
+    FIREBASE_CLIENT_EMAIL: str | None = Field(default=None, description="Firebase Client Email")
+    FIREBASE_PRIVATE_KEY: str | None = Field(default=None, description="Firebase Private Key")
+    FIREBASE_STORAGE_BUCKET: str | None = Field(default=None, description="Firebase Storage Bucket")
+    FIREBASE_DATABASE_URL: str | None = Field(default=None, description="Firebase Realtime Database URL")
+    FIREBASE_CREDENTIALS_PATH: str | None = Field(default=None, description="Path to serviceAccountKey.json if used")
 
     # AI API Keys
-    AI_API_KEY: Optional[str] = Field(default=None, description="Gemini / AI Provider API Key")
+    AI_API_KEY: str | None = Field(default=None, description="Gemini / AI Provider API Key")
     AI_MODEL_NAME: str = Field(default="gemini-1.5-flash", description="Default Vision & Text AI Model")
 
     # Application Behavior

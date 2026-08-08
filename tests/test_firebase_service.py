@@ -1,12 +1,14 @@
+import random
+
 import pytest
-import pytest_asyncio
+
+from app.models.schemas import FoodLog, today_str
 from app.services.firebase_service import firebase_service
-from app.models.schemas import FoodLog, ActivityLog, SleepLog, today_str
 
 
 @pytest.mark.asyncio
 async def test_user_creation_and_retrieval():
-    user_id = 999001
+    user_id = random.randint(1000000, 9999999)
     user = await firebase_service.create_user(telegram_user_id=user_id, username="testuser")
     assert user.telegram_user_id == user_id
     assert user.profile.age == 20
@@ -19,7 +21,7 @@ async def test_user_creation_and_retrieval():
 
 @pytest.mark.asyncio
 async def test_update_profile():
-    user_id = 999002
+    user_id = random.randint(1000000, 9999999)
     await firebase_service.create_user(telegram_user_id=user_id)
     updated = await firebase_service.update_profile(user_id, {"age": 22, "current_weight_kg": 74.0})
     assert updated.profile.age == 22
@@ -28,9 +30,10 @@ async def test_update_profile():
 
 @pytest.mark.asyncio
 async def test_food_and_daily_summary_aggregation():
-    user_id = 999003
+    user_id = random.randint(1000000, 9999999)
+    await firebase_service.create_user(telegram_user_id=user_id)
     food_log = FoodLog(
-        food_log_id="test_f1",
+        food_log_id=f"test_f_{user_id}",
         telegram_user_id=user_id,
         food_name="Dada Ayam Panggang",
         portion="100g",
@@ -55,7 +58,8 @@ async def test_food_and_daily_summary_aggregation():
 
 @pytest.mark.asyncio
 async def test_weight_logging():
-    user_id = 999004
+    user_id = random.randint(1000000, 9999999)
+    await firebase_service.create_user(telegram_user_id=user_id)
     w_log = await firebase_service.log_weight(user_id, 74.2)
     assert w_log.weight_kg == 74.2
     assert w_log.starting_weight_kg == 75.0
@@ -68,7 +72,8 @@ async def test_weight_logging():
 
 @pytest.mark.asyncio
 async def test_water_logging():
-    user_id = 999005
+    user_id = random.randint(1000000, 9999999)
+    await firebase_service.create_user(telegram_user_id=user_id)
     await firebase_service.log_water(user_id, 500)
     await firebase_service.log_water(user_id, 250)
 
@@ -81,7 +86,7 @@ async def test_water_logging():
 
 @pytest.mark.asyncio
 async def test_storage_upload_mock_fallback():
-    user_id = 999006
+    user_id = random.randint(1000000, 9999999)
     res = await firebase_service.upload_food_image(user_id, b"fake_image_bytes", "jpg")
     assert "storage_path" in res
     assert f"food-images/{user_id}" in res["storage_path"]

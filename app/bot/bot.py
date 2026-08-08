@@ -1,25 +1,25 @@
-from typing import Optional
+
 from aiogram import Bot, Dispatcher
-from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
 
 from app.config import settings
-from app.utils.logger import logger
 from app.handlers import (
-    start,
+    activity,
+    coach,
     dashboard,
     food,
-    activity,
-    weight,
     sleep,
-    water,
+    start,
     statistics,
-    coach,
+    water,
+    weight,
 )
+from app.utils.logger import logger
 
 
-def create_bot(token: Optional[str] = None) -> Bot:
+def create_bot(token: str | None = None) -> Bot:
     """Instantiate aiogram 3.x Bot with HTML/Markdown parsing."""
     bot = Bot(
         token=token or settings.TELEGRAM_BOT_TOKEN,
@@ -43,8 +43,8 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(statistics.router)
     dp.include_router(coach.router)
 
-    from aiogram.types import ErrorEvent
     from aiogram.exceptions import TelegramBadRequest
+    from aiogram.types import ErrorEvent
 
     @dp.errors()
     async def global_error_handler(event: ErrorEvent):

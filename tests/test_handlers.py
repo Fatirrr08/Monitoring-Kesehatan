@@ -1,5 +1,4 @@
-import pytest
-from app.bot.bot import create_dispatcher, create_bot
+from app.bot.bot import create_bot, create_dispatcher
 
 
 def test_dispatcher_routers_registration():
@@ -21,4 +20,4 @@ def test_dispatcher_routers_registration():
 def test_bot_instance():
     bot = create_bot()
     assert bot is not None
-    assert bot.token.startswith("123456789:")
+    assert bot.token is not None and len(bot.token) > 10

@@ -1,12 +1,11 @@
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, Message
 
-from app.services.firebase_service import firebase_service
-from app.services.activity_service import activity_service
-from app.bot.states import ActivityState
 from app.bot.keyboards import get_main_menu_keyboard
+from app.services.activity_service import activity_service
+from app.services.firebase_service import firebase_service
 
 router = Router(name="activity_router")
 
@@ -49,6 +48,29 @@ async def cmd_run(message: Message):
         f"⏱️ Durasi: `{int(saved.duration_minutes)}` menit (Pace `{saved.pace_min_per_km}`'/km)\n"
         f"🔥 Kalori Terbakar: ~`{saved.estimated_calories}` kcal\n\n"
         "_Hebat! Pastikan minum air putih dan cukupi elektrolit setelah lari._",
+        reply_markup=get_main_menu_keyboard(),
+        parse_mode="Markdown"
+    )
+
+
+@router.message(Command("badminton"))
+async def cmd_badminton(message: Message):
+    args = message.text.split(maxsplit=1)
+    args_text = args[1] if len(args) > 1 else "2 matches"
+    user = await firebase_service.get_user(message.from_user.id)
+    weight = user.profile.current_weight_kg if user else 75.0
+
+    act_log = activity_service.parse_activity_command("badminton", args_text, message.from_user.id, weight)
+    saved = await firebase_service.log_activity(act_log)
+
+    c_range = f"{saved.calories_min}–{saved.calories_max} kcal" if saved.calories_min else f"{saved.estimated_calories} kcal"
+
+    await message.answer(
+        f"🏸 *BADMINTON TERCATAT!*\n\n"
+        f"🏸 Pertandingan: `{saved.matches or 2}` match" + (f" ({saved.sets} set)" if saved.sets else "") + "\n"
+        f"⏱️ Estimasi Durasi: `{int(saved.duration_minutes)}` menit\n"
+        f"🔥 Kalori Terbakar: ~`{c_range}`\n\n"
+        "_Badminton melatih kelincahan, daya tahan kardio, dan pembakaran kalori yang efektif!_",
         reply_markup=get_main_menu_keyboard(),
         parse_mode="Markdown"
     )

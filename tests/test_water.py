@@ -1,4 +1,3 @@
-import pytest
 from app.utils.formatting import make_progress_bar
 
 

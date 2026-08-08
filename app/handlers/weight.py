@@ -1,12 +1,13 @@
 import re
-from aiogram import Router, F
-from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery
-from aiogram.fsm.context import FSMContext
 
-from app.services.firebase_service import firebase_service
-from app.bot.states import WeightState
+from aiogram import F, Router
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, Message
+
 from app.bot.keyboards import get_main_menu_keyboard
+from app.bot.states import WeightState
+from app.services.firebase_service import firebase_service
 
 router = Router(name="weight_router")
 

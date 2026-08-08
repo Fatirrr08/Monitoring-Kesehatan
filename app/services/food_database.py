@@ -1,5 +1,5 @@
-from typing import Dict, Optional, List
-from pydantic import BaseModel, Field
+
+from pydantic import BaseModel
 
 
 class IndonesianFoodItem(BaseModel):
@@ -15,10 +15,10 @@ class IndonesianFoodItem(BaseModel):
     fiber_g: float
     sodium_mg: float
     category: str
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
-INDONESIAN_FOOD_DATABASE: Dict[str, IndonesianFoodItem] = {
+INDONESIAN_FOOD_DATABASE: dict[str, IndonesianFoodItem] = {
     "nasi_putih": IndonesianFoodItem(
         key="nasi_putih",
         name="Nasi Putih",
@@ -442,7 +442,7 @@ INDONESIAN_FOOD_DATABASE: Dict[str, IndonesianFoodItem] = {
 }
 
 
-def search_food(query: str) -> List[IndonesianFoodItem]:
+def search_food(query: str) -> list[IndonesianFoodItem]:
     """Fuzzy-search food items in the Indonesian database."""
     q = query.lower().strip()
     results = []
@@ -452,5 +452,5 @@ def search_food(query: str) -> List[IndonesianFoodItem]:
     return results
 
 
-def get_food_by_key(key: str) -> Optional[IndonesianFoodItem]:
+def get_food_by_key(key: str) -> IndonesianFoodItem | None:
     return INDONESIAN_FOOD_DATABASE.get(key)

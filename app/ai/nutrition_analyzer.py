@@ -1,21 +1,23 @@
 import json
-from typing import Dict, Any, Optional
+from typing import Any
+
 from app.config import settings
-from app.utils.logger import logger
 from app.models.schemas import UserDocument
+from app.utils.logger import logger
 
 
 class NutritionAnalyzer:
     """Extracts nutrition facts labels and evaluates them against user goals."""
 
     @classmethod
-    async def analyze_label(cls, image_bytes: bytes, user: Optional[UserDocument] = None) -> Dict[str, Any]:
+    async def analyze_label(cls, image_bytes: bytes, user: UserDocument | None = None) -> dict[str, Any]:
         """Parse nutrition label using OCR / Vision AI."""
         if settings.AI_API_KEY:
             try:
+                import io
+
                 import google.generativeai as genai
                 from PIL import Image
-                import io
 
                 genai.configure(api_key=settings.AI_API_KEY)
                 model = genai.GenerativeModel(settings.AI_MODEL_NAME or "gemini-1.5-flash")
@@ -43,10 +45,8 @@ class NutritionAnalyzer:
 
                 response = await model.generate_content_async([prompt, pil_img])
                 text = response.text.strip()
-                if text.startswith("```json"):
-                    text = text[7:]
-                if text.endswith("```"):
-                    text = text[:-3]
+                text = text.removeprefix("```json")
+                text = text.removesuffix("```")
                 return json.loads(text.strip())
             except Exception as e:
                 logger.warning(f"Label OCR error ({e}). Using mock parser.")
@@ -67,7 +67,7 @@ class NutritionAnalyzer:
         }
 
     @staticmethod
-    def format_label_card(data: Dict[str, Any], user: Optional[UserDocument] = None) -> str:
+    def format_label_card(data: dict[str, Any], user: UserDocument | None = None) -> str:
         """Format the product label result and explain fit with user goals."""
         sugar_g = data.get("sugar_g", 0.0)
         sugar_note = "🟢 Gula terkendali" if sugar_g <= 10 else "🟡 Perhatikan batas gula harian"

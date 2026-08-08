@@ -1,12 +1,12 @@
 import re
-from aiogram import Router, F
-from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery
-from aiogram.fsm.context import FSMContext
 
+from aiogram import F, Router
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, Message
+
+from app.bot.keyboards import get_water_quick_keyboard
 from app.services.firebase_service import firebase_service
-from app.bot.states import WaterState
-from app.bot.keyboards import get_main_menu_keyboard, get_water_quick_keyboard
 from app.utils.formatting import make_progress_bar
 
 router = Router(name="water_router")

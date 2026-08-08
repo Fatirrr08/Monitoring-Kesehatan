@@ -1,10 +1,10 @@
-from aiogram import Router, F
+from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import CallbackQuery, Message
 
+from app.bot.keyboards import get_main_menu_keyboard
 from app.services.firebase_service import firebase_service
 from app.services.report_service import report_service
-from app.bot.keyboards import get_main_menu_keyboard
 
 router = Router(name="statistics_router")
 

@@ -1,4 +1,3 @@
-import pytest
 from app.services.sleep_service import sleep_service
 
 

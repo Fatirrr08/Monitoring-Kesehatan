@@ -1,21 +1,21 @@
 import uuid
-from aiogram import Router, F
-from aiogram.filters import Command
-from aiogram.types import Message, CallbackQuery, ContentType
-from aiogram.fsm.context import FSMContext
 
-from app.services.firebase_service import firebase_service
-from app.services.food_database import get_food_by_key, search_food
-from app.ai.vision import vision_service
+from aiogram import F, Router
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, Message
+
 from app.ai.nutrition_analyzer import nutrition_analyzer
-from app.bot.states import FoodState
+from app.ai.vision import vision_service
 from app.bot.keyboards import (
-    get_main_menu_keyboard,
     get_food_confirm_keyboard,
+    get_main_menu_keyboard,
     get_quick_food_keyboard,
 )
-from app.models.schemas import FoodLog, utc_now, today_str
-from app.utils.logger import logger
+from app.bot.states import FoodState
+from app.models.schemas import FoodLog, today_str
+from app.services.firebase_service import firebase_service
+from app.services.food_database import get_food_by_key, search_food
 
 router = Router(name="food_router")
 
@@ -138,12 +138,27 @@ async def cb_quick_food(callback: CallbackQuery):
 
 @router.message(F.photo)
 async def handle_food_photo(message: Message, state: FSMContext):
-    """Process uploaded food picture or nutrition label."""
+    """Process uploaded food picture or nutrition label with security validation."""
     bot = message.bot
     photo = message.photo[-1]
+
+    # File size validation (limit 15MB)
+    if photo.file_size and photo.file_size > 15 * 1024 * 1024:
+        await message.answer("⚠️ Ukuran gambar terlalu besar. Maksimum 15 MB.")
+        return
+
     file_info = await bot.get_file(photo.file_id)
     file_io = await bot.download_file(file_info.file_path)
     image_bytes = file_io.read()
+
+    # Magic byte verification (JPEG, PNG, WebP)
+    is_valid_image = (
+        image_bytes.startswith((b"\xff\xd8\xff", b"\x89PNG\r\n\x1a\n"))
+        or (image_bytes.startswith(b"RIFF") and image_bytes[8:12] == b"WEBP")
+    )
+    if not is_valid_image:
+        await message.answer("⚠️ Format file tidak didukung. Mohon kirimkan foto JPG, PNG, atau WebP.")
+        return
 
     # Upload to Firebase Storage
     upload_res = await firebase_service.upload_food_image(
@@ -152,7 +167,6 @@ async def handle_food_photo(message: Message, state: FSMContext):
         file_extension="jpg",
     )
 
-    # Check if user specifically requested label scanner or default to meal analysis
     current_state = await state.get_state()
     if current_state == FoodState.waiting_label_photo:
         user_doc = await firebase_service.get_user(message.from_user.id)
@@ -164,6 +178,8 @@ async def handle_food_photo(message: Message, state: FSMContext):
             "food_name": label_res.get("product_name", "Produk Kemasan"),
             "portion": label_res.get("serving_size", "1 sajian"),
             "calories": label_res.get("calories", 140),
+            "calories_min": label_res.get("calories", 140),
+            "calories_max": label_res.get("calories", 140),
             "protein_g": label_res.get("protein_g", 6.0),
             "carbs_g": label_res.get("carbs_g", 18.0),
             "fat_g": label_res.get("fat_g", 5.0),
@@ -171,10 +187,11 @@ async def handle_food_photo(message: Message, state: FSMContext):
             "added_sugar_g": label_res.get("sugar_g", 8.0),
             "fiber_g": label_res.get("fiber_g", 0.0),
             "sodium_mg": label_res.get("sodium_mg", 125.0),
-            "confidence": "high",
+            "confidence": 0.95,
             "source": "nutrition_label_ocr",
             "storage_path": upload_res["storage_path"],
             "image_url": upload_res["image_url"],
+            "assumptions": ["Berdasarkan nilai gizi pada kemasan"],
         }
         await message.answer(
             text=card_text,
@@ -182,27 +199,29 @@ async def handle_food_photo(message: Message, state: FSMContext):
             parse_mode="Markdown"
         )
     else:
-        # Standard food photo analysis
+        # Structured visual AI estimation
         analysis = await vision_service.analyze_food_image(image_bytes)
         card_text = vision_service.format_food_analysis_card(analysis)
         pending_id = uuid.uuid4().hex[:8]
         _pending_confirmations[pending_id] = {
             "telegram_user_id": message.from_user.id,
-            "food_name": analysis.get("food_name", "Piring Seimbang"),
-            "portion": analysis.get("portion", "1 porsi"),
-            "calories": analysis.get("calories", 480),
-            "protein_g": analysis.get("protein_g", 32.0),
-            "carbs_g": analysis.get("carbs_g", 54.0),
-            "fat_g": analysis.get("fat_g", 14.0),
-            "total_sugar_g": analysis.get("total_sugar_g", 3.0),
-            "added_sugar_g": analysis.get("added_sugar_g", 0.0),
-            "fiber_g": analysis.get("fiber_g", 3.0),
-            "sodium_mg": analysis.get("sodium_mg", 420.0),
-            "confidence": analysis.get("confidence", "medium"),
+            "food_name": analysis.food_name,
+            "portion": analysis.portion,
+            "calories": analysis.calories,
+            "calories_min": analysis.calories_min,
+            "calories_max": analysis.calories_max,
+            "protein_g": analysis.protein_g,
+            "carbs_g": analysis.carbs_g,
+            "fat_g": analysis.fat_g,
+            "total_sugar_g": analysis.total_sugar_g,
+            "added_sugar_g": analysis.added_sugar_g,
+            "fiber_g": analysis.fiber_g,
+            "sodium_mg": analysis.sodium_mg,
+            "confidence": analysis.overall_confidence,
             "source": "photo_ai",
             "storage_path": upload_res["storage_path"],
             "image_url": upload_res["image_url"],
-            "items": analysis.get("items", []),
+            "assumptions": analysis.assumptions,
         }
         await message.answer(
             text=card_text,

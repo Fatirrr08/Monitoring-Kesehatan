@@ -1,15 +1,14 @@
 import re
 import uuid
-from datetime import datetime, time
-from typing import Tuple, Optional
-from app.models.schemas import SleepLog, utc_now, today_str
+
+from app.models.schemas import SleepLog, today_str, utc_now
 
 
 class SleepService:
     """Evaluates sleep duration independently from sleep schedule timing."""
 
     @staticmethod
-    def parse_sleep_input(input_str: str) -> Tuple[str, str, float]:
+    def parse_sleep_input(input_str: str) -> tuple[str, str, float]:
         """Parse time strings like '07:00 15:00', '23:30 07:30', or '8h'."""
         text = input_str.strip().lower()
 
@@ -49,7 +48,7 @@ class SleepService:
         cls,
         telegram_user_id: int,
         input_str: str,
-        notes: Optional[str] = None,
+        notes: str | None = None,
     ) -> SleepLog:
         """Create structured SleepLog separating duration assessment from schedule timing."""
         bedtime, wake_time, duration = cls.parse_sleep_input(input_str)

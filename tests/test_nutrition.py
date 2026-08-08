@@ -1,7 +1,9 @@
-import pytest
-from app.services.food_database import search_food, get_food_by_key, INDONESIAN_FOOD_DATABASE
+from app.services.food_database import (
+    INDONESIAN_FOOD_DATABASE,
+    get_food_by_key,
+    search_food,
+)
 from app.services.nutrition_service import nutrition_service
-from app.models.schemas import DailySummary
 
 
 def test_indonesian_food_database_contains_staples():

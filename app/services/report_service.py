@@ -1,8 +1,7 @@
 from datetime import datetime, timedelta
-from typing import Dict, Any, List
-from app.models.schemas import DailySummary, WeightLog
+
+from app.models.schemas import DailySummary
 from app.services.firebase_service import firebase_service
-from app.utils.formatting import make_progress_bar
 
 
 class ReportService:
@@ -38,8 +37,8 @@ class ReportService:
     @staticmethod
     async def generate_weekly_report(telegram_user_id: int) -> str:
         """Aggregate 7-day data for weekly analytics."""
-        now = datetime.now()
-        summaries: List[DailySummary] = []
+        now = datetime.now(timezone.utc)
+        summaries: list[DailySummary] = []
 
         for i in range(7):
             dt_str = (now - timedelta(days=i)).strftime("%Y-%m-%d")

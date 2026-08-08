@@ -1,5 +1,6 @@
-from typing import List, Dict, Any
-from app.models.schemas import FoodLog, DailySummary
+from typing import Any
+
+from app.models.schemas import DailySummary
 from app.utils.formatting import make_progress_bar
 
 
@@ -7,7 +8,7 @@ class NutritionService:
     """Business logic for nutrition calculations, sugar monitoring, and visual formatting."""
 
     @staticmethod
-    def calculate_sugar_summary(total_sugar: float, added_sugar: float, max_added: float = 25.0) -> Dict[str, Any]:
+    def calculate_sugar_summary(total_sugar: float, added_sugar: float, max_added: float = 25.0) -> dict[str, Any]:
         """Differentiate natural sugar (from fruits/dairy) and added sugar with traffic light indicator."""
         status = "🟢 Good" if added_sugar <= max_added else "🟡 Di atas target"
         return {

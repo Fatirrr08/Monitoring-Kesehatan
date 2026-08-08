@@ -1,6 +1,7 @@
 import logging
 import sys
 
+
 def setup_logger(name: str = "fittrack") -> logging.Logger:
     logger = logging.getLogger(name)
     if not logger.handlers:

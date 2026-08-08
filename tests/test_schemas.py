@@ -1,14 +1,8 @@
-import pytest
 from app.models.schemas import (
-    UserProfile,
-    UserGoals,
-    UserDocument,
-    FoodLog,
     ActivityLog,
-    WeightLog,
-    SleepLog,
-    WaterLog,
-    DailySummary,
+    FoodLog,
+    UserGoals,
+    UserProfile,
 )
 
 

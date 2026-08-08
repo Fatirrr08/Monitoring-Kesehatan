@@ -1,9 +1,9 @@
 import asyncio
-import sys
+
 from app.bot.bot import create_bot, create_dispatcher
 from app.config import settings
-from app.utils.logger import logger
 from app.services.firebase_service import firebase_service
+from app.utils.logger import logger
 
 
 async def main():
